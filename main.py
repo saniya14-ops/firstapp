@@ -3,10 +3,10 @@ import sqlite3
 from datetime import datetime
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key_here'  # if not already present
-app.config['SESSION_COOKIE_SECURE'] = False
-app.config['SESSION_COOKIE_SAMESITE'] = "Lax"
-app.secret_key = "secret123"
+ # if not already present
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = "None"
+app.secret_key = config.SECRET_KEY
 
 # ---------------- DATABASE ----------------
 
@@ -140,4 +140,5 @@ def logout():
 
 if __name__ == "__main__":
     app.run(app.run(host="0.0.0.0", port=5000, debug=True))
+
 
