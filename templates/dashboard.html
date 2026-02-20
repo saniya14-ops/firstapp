@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Dashboard</title>
+</head>
+
+<body>
+
+<h2>Dashboard</h2>
+
+<a href="/logout">Logout</a>
+
+<h3>Add Visitor</h3>
+
+<form action="/add" method="POST">
+
+Name:<br>
+<input type="text" name="name" required><br>
+
+Phone:<br>
+<input type="text" name="phone" required><br>
+
+Purpose:<br>
+<input type="text" name="purpose" required><br>
+
+Time:<br>
+<input type="text" name="time" required><br><br>
+
+<button type="submit">Add Visitor</button>
+
+</form>
+
+
+<h3>Visitor List</h3>
+
+<table border="1">
+
+<tr>
+<th>ID</th>
+<th>Name</th>
+<th>Phone</th>
+<th>Purpose</th>
+<th>Time</th>
+</tr>
+
+{% for visitor in visitors %}
+
+<tr>
+<td>{{visitor.id}}</td>
+<td>{{visitor.name}}</td>
+<td>{{visitor.phone}}</td>
+<td>{{visitor.purpose}}</td>
+<td>{{visitor.time}}</td>
+</tr>
+
+{% endfor %}
+
+</table>
+
+</body>
+</html>
