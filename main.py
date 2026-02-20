@@ -1,144 +1,128 @@
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect, session, url_for, flash
 import sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import config
 
 app = Flask(__name__)
- # if not already present
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = "None"
+
+# --- SESSION CONFIG ---
 app.secret_key = config.SECRET_KEY
+# For local dev, do not enforce secure cookies
+app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_SAMESITE'] = "Lax"
 
-# ---------------- DATABASE ----------------
 
-def init_db():
-
+# --- DATABASE CONNECTION ---
+def get_db():
+    """Get SQLite connection"""
     conn = sqlite3.connect("database.db")
-    c = conn.cursor()
+    conn.row_factory = sqlite3.Row
+    return conn
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS visitors(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        phone TEXT,
-        flat TEXT,
-        purpose TEXT,
-        vehicle TEXT,
-        entry_time TEXT
-    )
-    """)
 
-    conn.commit()
-    conn.close()
+# --- CREATE TABLE ---
+def create_table():
+    """Create visitors table if it does not exist"""
+    with get_db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS visitors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                time TEXT NOT NULL
+            )
+        """)
 
-init_db()
+create_table()
 
-# ---------------- LOGIN PAGE ----------------
 
+# --- HOME PAGE (LOGIN) ---
 @app.route("/")
 def home():
     return render_template("login.html")
 
-# ---------------- LOGIN ----------------
 
+# --- LOGIN ---
 @app.route("/login", methods=["POST"])
 def login():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
 
-    username = request.form["username"]
-    password = request.form["password"]
+    # Simple validation
+    if not username or not password:
+        flash("Please enter username and password")
+        return redirect(url_for("home"))
 
-    if username == "admin" and password == "admin123":
-
+    # ADMIN LOGIN
+    if username == config.USERNAME_ADMIN and password == config.PASSWORD_ADMIN:
         session["user"] = username
         session["role"] = "admin"
-        return redirect("/dashboard")
+        return redirect(url_for("dashboard"))
 
-    elif username == "guard" and password == "1234":
-
+    # GUARD LOGIN
+    elif username == config.USERNAME_GUARD and password == config.PASSWORD_GUARD:
         session["user"] = username
         session["role"] = "guard"
-        return redirect("/dashboard")
+        return redirect(url_for("dashboard"))
 
     else:
-        return "Invalid Login"
+        flash("Invalid username or password")
+        return redirect(url_for("home"))
 
-# ---------------- DASHBOARD ----------------
 
-@app.route("/dashboard", methods=["GET","POST"])
+# --- DASHBOARD ---
+@app.route("/dashboard")
 def dashboard():
-
     if "user" not in session:
-        return redirect("/")
+        return redirect(url_for("home"))
 
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
+    with get_db() as conn:
+        visitors = conn.execute("SELECT * FROM visitors ORDER BY id DESC").fetchall()
 
-    if request.method == "POST":
+    return render_template("dashboard.html", visitors=visitors, role=session["role"])
 
-        name = request.form["name"]
-        phone = request.form["phone"]
-        flat = request.form["flat"]
-        purpose = request.form["purpose"]
-        vehicle = request.form["vehicle"]
 
-        entry_time = datetime.now().strftime("%d-%m-%Y %H:%M")
-
-        c.execute("INSERT INTO visitors(name,phone,flat,purpose,vehicle,entry_time) VALUES(?,?,?,?,?,?)",
-                  (name,phone,flat,purpose,vehicle,entry_time))
-
-        conn.commit()
-
-    conn.close()
-
-    return render_template("dashboard.html", role=session["role"])
-
-# ---------------- HISTORY PAGE ----------------
-
-@app.route("/history")
-def history():
-
+# --- ADD VISITOR ---
+@app.route("/add", methods=["POST"])
+def add_visitor():
     if "user" not in session:
-        return redirect("/")
+        return redirect(url_for("home"))
 
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
+    name = request.form.get("name", "").strip()
+    phone = request.form.get("phone", "").strip()
+    purpose = request.form.get("purpose", "").strip()
 
-    c.execute("SELECT * FROM visitors ORDER BY id DESC")
-    data = c.fetchall()
+    # --- VALIDATION ---
+    if not name or not phone or not purpose:
+        flash("All fields are required")
+        return redirect(url_for("dashboard"))
 
-    conn.close()
+    if len(phone) != 10 or not phone.isdigit():
+        flash("Phone number must be 10 digits")
+        return redirect(url_for("dashboard"))
 
-    return render_template("history.html",
-                           data=data,
-                           role=session["role"])
+    # Auto timestamp
+    time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-# ---------------- DELETE ----------------
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO visitors (name, phone, purpose, time) VALUES (?, ?, ?, ?)",
+            (name, phone, purpose, time)
+        )
 
-@app.route("/delete/<int:id>")
-def delete(id):
+    flash("Visitor added successfully")
+    return redirect(url_for("dashboard"))
 
-    if session["role"] != "admin":
-        return "Access Denied"
 
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-
-    c.execute("DELETE FROM visitors WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
-
-    return redirect("/history")
-
-# ---------------- LOGOUT ----------------
-
+# --- LOGOUT ---
 @app.route("/logout")
 def logout():
-
     session.clear()
-    return redirect("/")
+    return redirect(url_for("home"))
 
-# ---------------- RUN ----------------
 
+# --- RUN APP ---
 if __name__ == "__main__":
-    app.run(app.run(host="0.0.0.0", port=5000, debug=True))
-
-
+    app.run(debug=True)
